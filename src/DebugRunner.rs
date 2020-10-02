@@ -4,7 +4,7 @@ use crate::ChipEight;
 pub fn run(mut em : &mut ChipEight::Em)
 {
   let mut cycles : u32 = 0;
-  loop
+  while !em.finished() 
   {
     cycles = cycles + 1;
     println!("////////////Cycle {}", cycles);

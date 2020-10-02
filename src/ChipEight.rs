@@ -4,7 +4,7 @@ use std::thread;
 use std::time;
 
 const MEM_LENGTH : usize = 0x1000;
-const NUM_REGS : usize = 0x0F;
+const NUM_REGS : usize = 0x10;
 const STACK_LEN : usize = 12;
 const SCREEN_SIZE : usize = 64*32;
 const PC_STEP : u16 = 2;
@@ -24,7 +24,7 @@ pub struct Em
   delay_timer : u8,
   sound_timer : u8,
   screen_buf : [u8 ; SCREEN_SIZE],
-  last_op : u16
+  end_em : bool
 }
 
 struct EmOp
@@ -50,7 +50,7 @@ pub fn new_em() -> Em
     delay_timer: 0,
     sound_timer: 0,
     screen_buf: [0x00; SCREEN_SIZE],
-    last_op : 0,
+    end_em: false,
   }
 }
 
@@ -74,6 +74,11 @@ impl Em
     self.execute(&em_op);
     //thread::sleep(time::Duration::from_millis(1000)); // TODO: Update this to run at 500hz, probably with more than just a sleep??
     raw_op
+  }
+
+  pub fn finished(self : &mut Self) -> bool
+  {
+    self.end_em
   }
 
   fn fetch(self : &mut Self) -> u16
@@ -105,6 +110,7 @@ impl Em
   {
     match (op.nibbles[0], op.nibbles[1], op.nibbles[2], op.nibbles[3])
     {
+       (0x0, 0x0, 0x0, 0x0) => self.end_em = true,
        (0x0, 0x0, 0xE, 0x0) => self.op_cls(),
        (0x0, 0x0, 0xE, 0xE) => self.op_ret(), 
        (0x0,   _,   _,   _) => self.pc = self.pc + PC_STEP,
@@ -115,6 +121,10 @@ impl Em
        (0x5,   _,   _,   _) => self.op_skipifreg(op.args_x, op.args_y),
        (0x6,   _,   _,   _) => self.op_streg(op.args_x, op.args_nn),
        (0x7,   _,   _,   _) => self.op_addreg(op.args_x, op.args_nn),
+       (0x8,   _,   _, 0x0) => self.op_movxy(op.args_x, op.args_nn),
+       (0x8,   _,   _, 0x1) => self.op_xory(op.args_x, op.args_nn),
+       (0x8,   _,   _, 0x2) => self.op_xandy(op.args_x, op.args_nn),
+       (0x8,   _,   _, 0x3) => self.op_xxory(op.args_x, op.args_nn),
        _ => 
        {
           let mystery_op = (op.nibbles[0] as u16) << 12 | (op.nibbles[1] as u16) << 8 | (op.nibbles[2] as u16) << 4 | op.nibbles[3] as u16;
@@ -189,9 +199,10 @@ impl Em
 
   fn op_skipif(self : &mut Self, reg : u8, val : u8)
   {
-    assert!(reg < 16);
+    let r = reg as usize;
+    assert!(r < NUM_REGS);
     self.pc = self.pc + PC_STEP;
-    if self.v[reg as usize] == val
+    if self.v[r] == val
     {
       self.pc = self.pc + PC_STEP;
     }
@@ -199,9 +210,10 @@ impl Em
 
   fn op_skipnif(self : &mut Self, reg : u8, val : u8)
   {
-    assert!(reg < 16);
+    let r = reg as usize;
+    assert!(r < NUM_REGS);
     self.pc = self.pc + PC_STEP;
-    if self.v[reg as usize] != val
+    if self.v[r] != val
     {
       self.pc = self.pc + PC_STEP;
     }
@@ -209,9 +221,11 @@ impl Em
 
   fn op_skipifreg(self : &mut Self, regx : u8, regy : u8)
   {
-    assert!(regx < 16 && regy < 16);
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
     self.pc = self.pc + PC_STEP;
-    if self.v[regx as usize] == self.v[regy as usize] 
+    if self.v[x] == self.v[y] 
     {
       self.pc = self.pc + PC_STEP;
     }
@@ -219,15 +233,54 @@ impl Em
 
   fn op_streg(self : &mut Self, reg : u8, val : u8)
   {
-    assert!(reg < 16);
-    self.v[reg as usize] = val;
+    let r = reg as usize;
+    assert!(r < NUM_REGS);
+    self.v[r] = val;
     self.pc = self.pc + PC_STEP;
   }
 
   fn op_addreg(self : &mut Self, reg : u8, val : u8)
   {
-    assert!(reg < 16);
-    self.v[reg as usize] = self.v[reg as usize] + 1;
+    let r = reg as usize;
+    assert!(r < NUM_REGS);
+    self.v[r] = self.v[r] + 1;
     self.pc = self.pc + PC_STEP;
+  }
+
+  fn op_movxy(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    self.v[x] = self.v[y];
+  }
+
+  fn op_xory(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    self.v[x] = self.v[y] | self.v[x];
+  }
+
+  fn op_xandy(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    self.v[x] = self.v[y] & self.v[x];
+  }
+
+  fn op_xxory(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    self.v[x] = self.v[y] ^ self.v[x];
+
   }
 }
