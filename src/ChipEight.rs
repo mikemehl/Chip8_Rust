@@ -121,10 +121,16 @@ impl Em
        (0x5,   _,   _,   _) => self.op_skipifreg(op.args_x, op.args_y),
        (0x6,   _,   _,   _) => self.op_streg(op.args_x, op.args_nn),
        (0x7,   _,   _,   _) => self.op_addreg(op.args_x, op.args_nn),
-       (0x8,   _,   _, 0x0) => self.op_movxy(op.args_x, op.args_nn),
-       (0x8,   _,   _, 0x1) => self.op_xory(op.args_x, op.args_nn),
-       (0x8,   _,   _, 0x2) => self.op_xandy(op.args_x, op.args_nn),
-       (0x8,   _,   _, 0x3) => self.op_xxory(op.args_x, op.args_nn),
+       (0x8,   _,   _, 0x0) => self.op_movxy(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x1) => self.op_xory(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x2) => self.op_xandy(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x3) => self.op_xxory(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x4) => self.op_addxy(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x5) => self.op_subxy(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x6) => self.op_shrxy(op.args_x, op.args_y),
+       (0x8,   _,   _, 0x7) => self.op_subyx(op.args_x, op.args_y),
+       (0x8,   _,   _, 0xE) => self.op_shlxy(op.args_x, op.args_y),
+       (0x9,   _,   _, 0x0) => self.op_skipifnreg(op.args_x, op.args_y),
        _ => 
        {
           let mystery_op = (op.nibbles[0] as u16) << 12 | (op.nibbles[1] as u16) << 8 | (op.nibbles[2] as u16) << 4 | op.nibbles[3] as u16;
@@ -281,6 +287,91 @@ impl Em
     assert!(x < NUM_REGS && y < NUM_REGS);
     self.pc = self.pc + PC_STEP;
     self.v[x] = self.v[y] ^ self.v[x];
+  }
 
+  fn op_addxy(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    let val : u16 = (self.v[x] + self.v[y]).into(); 
+    if val & 0xFF00 > 0
+    {
+       self.v[0xF] = 0x01;
+    }
+    else
+    {
+       self.v[0xF] = 0x00;
+    }
+    self.v[x] = (val & 0xFF00) as u8;
+  }
+
+  fn op_subxy(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    let val : u16 = (self.v[x] - self.v[y]).into(); 
+    if val & 0xFF00 > 0
+    {
+       self.v[0xF] = 0x00;
+    }
+    else
+    {
+       self.v[0xF] = 0x01;
+    }
+    self.v[x] = (val & 0xFF00) as u8;
+  }
+
+  fn op_shrxy(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    self.v[0xF] = self.v[y] & 0x01;
+    self.v[x] = self.v[y] >> 1;
+  }
+
+  fn op_subyx(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    let val : u16 = (self.v[y] - self.v[x]).into(); 
+    if val & 0xFF00 > 0
+    {
+       self.v[0xF] = 0x00;
+    }
+    else
+    {
+       self.v[0xF] = 0x01;
+    }
+    self.v[x] = (val & 0xFF00) as u8;
+  }
+
+  fn op_shlxy(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    self.v[0xF] = self.v[y] & 0x80;
+    self.v[x] = self.v[y] << 1;
+  }
+
+  fn op_skipifnreg(self : &mut Self, regx : u8, regy : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    if self.v[x] != self.v[y] 
+    {
+      self.pc = self.pc + PC_STEP;
+    }
   }
 }
