@@ -2,6 +2,7 @@ use std::fs;
 use std::io::{stdin, Read};
 use std::thread;
 use std::time;
+use rand::prelude::*;
 
 const MEM_LENGTH : usize = 0x1000;
 const NUM_REGS : usize = 0x10;
@@ -131,6 +132,9 @@ impl Em
        (0x8,   _,   _, 0x7) => self.op_subyx(op.args_x, op.args_y),
        (0x8,   _,   _, 0xE) => self.op_shlxy(op.args_x, op.args_y),
        (0x9,   _,   _, 0x0) => self.op_skipifnreg(op.args_x, op.args_y),
+       (0xA,   _,   _,   _) => self.op_addrtoi(op.args_nnn),
+       (0xB,   _,   _,   _) => self.op_jmppls(op.args_nnn),
+       (0xC,   _,   _,   _) => self.op_rnd(op.args_x, op.args_nn),
        _ => 
        {
           let mystery_op = (op.nibbles[0] as u16) << 12 | (op.nibbles[1] as u16) << 8 | (op.nibbles[2] as u16) << 4 | op.nibbles[3] as u16;
@@ -374,4 +378,25 @@ impl Em
       self.pc = self.pc + PC_STEP;
     }
   }
+
+  fn op_addrtoi(self : &mut Self, addr : u16)
+  {
+    assert!((addr as usize) < MEM_LENGTH);
+    self.i = addr;
+    self.pc = self.pc + PC_STEP;
+  
+  }
+
+  fn op_jmppls(self : &mut Self, addr : u16)
+  {
+    assert!((addr as usize) < MEM_LENGTH);
+    self.pc = addr + (self.v[0] as u16);
+  }
+
+  fn op_rnd(self : &mut Self, reg : u8, mask : u8)
+  {
+    let mut rng = rand::thread_rng();
+    self.v[reg as usize] = rng.gen::<u8>() & mask;
+    self.pc = self.pc + PC_STEP;
+  } 
 }
