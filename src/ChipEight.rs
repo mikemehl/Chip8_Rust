@@ -7,7 +7,10 @@ use rand::prelude::*;
 const MEM_LENGTH : usize = 0x1000;
 const NUM_REGS : usize = 0x10;
 const STACK_LEN : usize = 12;
-const SCREEN_SIZE : usize = 64*32;
+const SCREEN_W : u8 = 64;
+const SCREEN_H : u8 = 32;
+const SCREEN_SIZE : usize = SCREEN_W as usize * SCREEN_H as usize;
+const SCREEN_SIZE_BYTES : usize = SCREEN_SIZE/8;
 const PC_STEP : u16 = 2;
 const PC_START : u16 = 0x200;
 const CYCLE_HZ : f32 = 500e0;
@@ -24,7 +27,7 @@ pub struct Em
   stack : [u16 ; STACK_LEN],
   delay_timer : u8,
   sound_timer : u8,
-  screen_buf : [u8 ; SCREEN_SIZE],
+  screen_buf : [u8 ; SCREEN_SIZE_BYTES],
   end_em : bool
 }
 
@@ -50,7 +53,7 @@ pub fn new_em() -> Em
     stack: [0x00; STACK_LEN],
     delay_timer: 0,
     sound_timer: 0,
-    screen_buf: [0x00; SCREEN_SIZE],
+    screen_buf: [0x00; SCREEN_SIZE_BYTES],
     end_em: false,
   }
 }
@@ -135,6 +138,7 @@ impl Em
        (0xA,   _,   _,   _) => self.op_addrtoi(op.args_nnn),
        (0xB,   _,   _,   _) => self.op_jmppls(op.args_nnn),
        (0xC,   _,   _,   _) => self.op_rnd(op.args_x, op.args_nn),
+       (0xD,   _,   _,   _) => self.op_spr(op.args_x, op.args_y, op.args_n),
        _ => 
        {
           let mystery_op = (op.nibbles[0] as u16) << 12 | (op.nibbles[1] as u16) << 8 | (op.nibbles[2] as u16) << 4 | op.nibbles[3] as u16;
@@ -395,8 +399,21 @@ impl Em
 
   fn op_rnd(self : &mut Self, reg : u8, mask : u8)
   {
+    assert!(reg < NUM_REGS as u8);
     let mut rng = rand::thread_rng();
     self.v[reg as usize] = rng.gen::<u8>() & mask;
     self.pc = self.pc + PC_STEP;
   } 
+
+  fn op_spr(self : &mut Self, regx : u8, regy : u8, n : u8)
+  {
+    let x = regx as usize;
+    let y = regy as usize;
+    assert!(x < NUM_REGS && y < NUM_REGS);
+    self.pc = self.pc + PC_STEP;
+    // Draw N bytes at v[x],v[y] starting at address in I..... 
+    // Each pixel is a bit???? Wuhoh.
+    let start_screen = self.v[x] + (self.v[y] * SCREEN_W)/8;
+    unimplemented!();
+  }
 }
